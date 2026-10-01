@@ -25,8 +25,12 @@
     if (!raf) raf = requestAnimationFrame(frame);
   }
   sdk(function (y) {
-    try { audioOn = !!y.system.isAudioEnabled(); } catch (e) { }
-    y.system.onAudioEnabledChange(function (v) { audioOn = !!v; if (!audioOn) muteNow(); });
+    if (inYT) {
+      try { audioOn = !!y.system.isAudioEnabled(); } catch (e) { console.warn('SDK isAudioEnabled failed:', e); }
+      try {
+        y.system.onAudioEnabledChange(function (v) { audioOn = !!v; if (!audioOn) muteNow(); });
+      } catch (e) { console.warn('SDK onAudioEnabledChange failed:', e); }
+    }
     y.system.onPause(doPause); y.system.onResume(doResume);
   });
 
@@ -54,16 +58,42 @@
   }
 
   // ---------- Audio (created on first gesture) ----------
-  function beep(f, d, type, vol) {
+  function ensureAudioContext() {
+    if (!ac) {
+      try {
+        var AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) ac = new AudioCtx();
+      } catch (e) {
+        console.warn('AudioContext creation failed:', e);
+      }
+    }
+    if (ac && ac.state === 'suspended') {
+      try {
+        ac.resume().catch(function (e) { console.warn('AudioContext resume failed:', e); });
+      } catch (e) {
+        console.warn('AudioContext resume error:', e);
+      }
+    }
+    return ac;
+  }
+
+  function beep(f, d, type, vol, fEnd) {
     if (!audioOn || paused) return;
     try {
-      if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
-      if (ac.state === 'suspended') ac.resume();
-      var o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
-      o.type = type || 'sine'; o.frequency.value = f;
-      g.gain.setValueAtTime(vol || 0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + d);
-      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d);
-    } catch (e) { }
+      var ctx = ensureAudioContext();
+      if (!ctx) return;
+      var o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(f, t);
+      if (fEnd) o.frequency.exponentialRampToValueAtTime(Math.max(20, fEnd), t + d);
+      var v = vol || 0.12;
+      g.gain.setValueAtTime(v, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t); o.stop(t + d);
+    } catch (e) {
+      console.warn('Audio play error:', e);
+    }
   }
 
   // ---------- Game state ----------
@@ -110,10 +140,17 @@
     spawn();
   }
   function endGame() {
-    state = 'over'; overAt = performance.now(); beep(150, .5, 'sawtooth', .1);
+    state = 'over'; overAt = performance.now();
     var nb = score > best; if (nb) { best = score; saveBest(); }
     sdk(function (y) { guard(y.engagement.sendScore({ value: score })); });
     over = { nb: nb };
+    if (nb) {
+      beep(520, .1, 'triangle', .12);
+      setTimeout(function () { beep(650, .1, 'triangle', .14); }, 90);
+      setTimeout(function () { beep(780, .25, 'triangle', .16); }, 180);
+    } else {
+      beep(150, .5, 'sawtooth', .1, 60);
+    }
   }
   var over = { nb: false };
 
@@ -235,9 +272,9 @@
   }
 
   // ---------- Input ----------
-  cv.addEventListener('pointerdown', function (e) { e.preventDefault(); tap(); });
+  cv.addEventListener('pointerdown', function (e) { e.preventDefault(); ensureAudioContext(); tap(); });
   window.addEventListener('keydown', function (e) {
-    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (!e.repeat) tap(); }
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); ensureAudioContext(); if (!e.repeat) tap(); }
   });
 
   reset(); resize(); loadBest(function () { dataReady = true; maybeReady(); }); raf = requestAnimationFrame(frame);
