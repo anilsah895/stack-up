@@ -1,5 +1,9 @@
 # Stack-Up
 
+<p align="center">
+  <img src="./stack-up-social-preview.png" alt="Stack-Up game banner" width="100%" />
+</p>
+
 > A fast-paced, minimalist HTML5 tower-stacking game built for YouTube Playables and web browsers.
 
 🌐 **Live Demo**: [https://anilsah895.github.io/stack-up/](https://anilsah895.github.io/stack-up/)
