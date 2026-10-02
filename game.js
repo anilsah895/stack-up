@@ -12,7 +12,7 @@
   var yt = (typeof ytgame !== 'undefined') ? ytgame : null, inYT = !!(yt && yt.IN_PLAYABLES_ENV);
   var audioOn = true, paused = false, raf = 0, last = 0, ac = null;
   function sdk(fn) { try { if (yt) fn(yt); } catch (e) { } }
-  function guard(p) { try { if (p && p.catch) p.catch(function () { }); } catch (e) { } }
+  function guard(p) { try { Promise.resolve(p).catch(function () { }); } catch (e) { } }
   function muteNow() { try { if (ac && ac.state === 'running') ac.suspend(); } catch (e) { } }
   function doPause() {
     if (paused) return; paused = true;
@@ -59,21 +59,8 @@
 
   // ---------- Audio (created on first gesture) ----------
   function ensureAudioContext() {
-    if (!ac) {
-      try {
-        var AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (AudioCtx) ac = new AudioCtx();
-      } catch (e) {
-        console.warn('AudioContext creation failed:', e);
-      }
-    }
-    if (ac && ac.state === 'suspended') {
-      try {
-        ac.resume().catch(function (e) { console.warn('AudioContext resume failed:', e); });
-      } catch (e) {
-        console.warn('AudioContext resume error:', e);
-      }
-    }
+    if (!ac) { try { var AudioCtx = window.AudioContext || window.webkitAudioContext; if (AudioCtx) ac = new AudioCtx(); } catch (e) { } }
+    if (ac && ac.state === 'suspended') { try { ac.resume().catch(function () { }); } catch (e) { } }
     return ac;
   }
 
@@ -215,7 +202,7 @@
   }
   function card(y, h) {
     var cw = 300, x = (W - cw) / 2; ctx.fillStyle = 'rgba(12,16,44,.78)'; ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(x, y, cw, h, 18); else ctx.rect(x, y, cw, h);
+    ctx.roundRect(x, y, cw, h, 18);
     ctx.fill(); ctx.strokeStyle = 'rgba(245,197,24,.6)'; ctx.lineWidth = 2; ctx.stroke();
   }
   function draw() {
@@ -262,9 +249,9 @@
       }
       cam += (camT - cam) * Math.min(dt * 6, 1);
       flash = Math.max(0, flash - dt * 3); skyP += (score - skyP) * Math.min(dt * 2, 1);
-      for (var k = rings.length - 1; k >= 0; k--) { rings[k].a -= dt * 2.5; rings[k].g += dt * 45; if (rings[k].a <= 0) rings.splice(k, 1); }
-      for (var i = debris.length - 1; i >= 0; i--) { var q = debris[i]; q.vy += 900 * dt; q.y -= q.vy * dt; if (sy(q.y) > vh + 60) debris.splice(i, 1); }
-      for (var j = pops.length - 1; j >= 0; j--) { pops[j].a -= dt * 1.4; pops[j].y += dt * 30; if (pops[j].a <= 0) pops.splice(j, 1); }
+      rings = rings.filter(function (o2) { o2.a -= dt * 2.5; o2.g += dt * 45; return o2.a > 0; });
+      debris = debris.filter(function (q) { q.vy += 900 * dt; q.y -= q.vy * dt; return sy(q.y) <= vh + 60; });
+      pops = pops.filter(function (o) { o.a -= dt * 1.4; o.y += dt * 30; return o.a > 0; });
     }
     draw();
     if (!firstFrame) { firstFrame = true; sdk(function (y) { y.game.firstFrameReady(); }); maybeReady(); }  // must not wait for a non-zero viewport
